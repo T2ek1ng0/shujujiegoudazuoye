@@ -38,19 +38,20 @@ class SubwayWindow(QMainWindow):
         self.plot_item.setAspectLocked(True)
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.draw_map()
-        # 初始化乘客图层 (红点表示人)
         self.people_item = pg.ScatterPlotItem(size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
         self.plot_item.addItem(self.people_item)
-        # 模拟一些假人数据 (格式: list of dict 或 对象), 这里的 pos 是当前坐标，target 是目标节点名称
         self.passengers = []
-        for _ in range(10):  # 先生成10个人测试
-            start_node = random.choice(list(self.graph.nodes.index))
+        for _ in range(10):
+            planned_path = ['Entry_A', 'Security_1', 'Gate_In']  # 之后想想怎么生成这个吧。。
+            start_node = planned_path[0]
+            # 获取起点的坐标
+            node_info = self.graph.nodes.loc[start_node]
             self.passengers.append({
                 'id': _,
-                'current_node': start_node,
-                'target_node': 'Gate_In',  # 假设都要去闸机
-                'progress': 0.0,  # 0.0 到 1.0 表示在边上的进度
-                'path': ['Entry_A', 'Security_1', 'Gate_In']  # 假路径
+                'pos': np.array([node_info['x'], node_info['y']], dtype=float),
+                'path': planned_path[1:],  # 剩下的路径
+                'v': 0.1,
+                'finished': False
             })
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
@@ -60,13 +61,31 @@ class SubwayWindow(QMainWindow):
         # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
         x_positions = []
         y_positions = []
+        arrival_threshold = self.passengers[0]['v']
         for p in self.passengers:
-            # 极简移动逻辑：如果还有下一站，就往下一站挪一点
-            # 实际作业中，这里要结合你的“边长”和“速度”属性, 比如: p['progress'] += speed / edge_length
-            # 这里为了演示，随机抖动一下
-            node_info = self.graph.nodes.loc[p['current_node']]
-            x_positions.append(node_info['x'] + random.uniform(-1, 1))
-            y_positions.append(node_info['y'] + random.uniform(-1, 1))
+            if p['finished']:  # 如果已经到达终点，停在原地
+                x_positions.append(p['pos'][0])
+                y_positions.append(p['pos'][1])
+                continue
+            if len(p['path']) == 0:
+                p['finished'] = True
+                continue
+            next_node_name = p['path'][0]
+            target_info = self.graph.nodes.loc[next_node_name]
+            target_pos = np.array([target_info['x'], target_info['y']], dtype=float)
+            direction_vector = target_pos - p['pos']
+            distance = np.linalg.norm(direction_vector)
+            if distance < arrival_threshold:
+                p['pos'] = target_pos
+                p['path'].pop(0)
+            else:
+                if distance > 0:
+                    normalized_dir = direction_vector / distance
+                else:
+                    normalized_dir = np.zeros(2)
+                p['pos'] += normalized_dir * p['v']
+            x_positions.append(p['pos'][0])
+            y_positions.append(p['pos'][1])
         # 刷新画布
         self.people_item.setData(x=x_positions, y=y_positions)
 
@@ -132,7 +151,6 @@ class SubwayWindow(QMainWindow):
 if __name__ == "__main__":
     sim = SubwayGraph()
     sim.load_data(r'data\nodes.csv', r'data\edges.csv')
-    # 2. 启动应用
     app = QApplication(sys.argv)
     window = SubwayWindow(sim)
     window.show()
