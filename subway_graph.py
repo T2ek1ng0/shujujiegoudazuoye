@@ -2,8 +2,9 @@ import sys
 import numpy as np
 import pandas as pd
 import pyqtgraph as pg
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QMessageBox
+from PySide6.QtCore import Qt, QTimer
+import random
 
 class SubwayGraph:
     def __init__(self):
@@ -33,10 +34,41 @@ class SubwayWindow(QMainWindow):
         self.gl_widget = pg.GraphicsLayoutWidget()  # 初始化 PyQtGraph 画布
         self.gl_widget.setBackground('w')
         layout.addWidget(self.gl_widget)
-        self.plot_item = self.gl_widget.addPlot(title="Station Map (Floor 1)")
+        self.plot_item = self.gl_widget.addPlot(title="Station Map")
         self.plot_item.setAspectLocked(True)
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.draw_map()
+        # 初始化乘客图层 (红点表示人)
+        self.people_item = pg.ScatterPlotItem(size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
+        self.plot_item.addItem(self.people_item)
+        # 模拟一些假人数据 (格式: list of dict 或 对象), 这里的 pos 是当前坐标，target 是目标节点名称
+        self.passengers = []
+        for _ in range(10):  # 先生成10个人测试
+            start_node = random.choice(list(self.graph.nodes.index))
+            self.passengers.append({
+                'id': _,
+                'current_node': start_node,
+                'target_node': 'Gate_In',  # 假设都要去闸机
+                'progress': 0.0,  # 0.0 到 1.0 表示在边上的进度
+                'path': ['Entry_A', 'Security_1', 'Gate_In']  # 假路径
+            })
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_simulation)
+        self.timer.start(50)  # 每50ms刷新一次
+
+    def update_simulation(self):
+        # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
+        x_positions = []
+        y_positions = []
+        for p in self.passengers:
+            # 极简移动逻辑：如果还有下一站，就往下一站挪一点
+            # 实际作业中，这里要结合你的“边长”和“速度”属性, 比如: p['progress'] += speed / edge_length
+            # 这里为了演示，随机抖动一下
+            node_info = self.graph.nodes.loc[p['current_node']]
+            x_positions.append(node_info['x'] + random.uniform(-1, 1))
+            y_positions.append(node_info['y'] + random.uniform(-1, 1))
+        # 刷新画布
+        self.people_item.setData(x=x_positions, y=y_positions)
 
     def draw_map(self):
         edge_x = []
@@ -70,7 +102,8 @@ class SubwayWindow(QMainWindow):
             size=15,
             brush=brushes,
             pen=pg.mkPen(None),  # 无边框
-            symbol='o'
+            symbol='o',
+            data=list(self.graph.nodes.index),
         )
         self.nodes_item.sigClicked.connect(self.on_node_clicked)
         self.plot_item.addItem(self.nodes_item)
@@ -78,9 +111,23 @@ class SubwayWindow(QMainWindow):
             text = pg.TextItem(text=name, color='k', anchor=(0.5, 0))
             text.setPos(row['x'], row['y'] + 1)
             self.plot_item.addItem(text)
+        # 锁定视角
+        min_x, max_x = self.graph.nodes['x'].min(), self.graph.nodes['x'].max()
+        min_y, max_y = self.graph.nodes['y'].min(), self.graph.nodes['y'].max()
+        padding = 10
+        self.plot_item.setRange(
+            xRange=(min_x - padding, max_x + padding),
+            yRange=(min_y - padding, max_y + padding)
+        )
+        self.plot_item.disableAutoRange()
 
     def on_node_clicked(self, plot, points):
-        print(f"Clicked point: {points[0].pos()}")
+        point = points[0]
+        pos = point.pos()
+        info_text = f"坐标位置:\nX: {pos.x():.1f}\nY: {pos.y():.1f}"
+        if hasattr(point, 'data') and point.data() is not None:
+            info_text = f"节点名称: {point.data()}\n{info_text}"
+        QMessageBox.information(self, "节点信息", info_text)
 
 if __name__ == "__main__":
     sim = SubwayGraph()
