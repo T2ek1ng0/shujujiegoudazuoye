@@ -1,0 +1,9 @@
+id,x,y,floor,type,capacity
+Entry_A,0,10,1,entry,0
+Security_1,10,10,1,security,5
+Gate_In,20,10,1,gate,10
+Stairs_Top,30,10,1,corridor,20
+Stairs_Bottom,33,10,-1,corridor,20
+Hall,40,10,-1,corridor,200
+Platform_A,40,20,-1,platform,100
+Platform_B,40,0,-1,platform,100
