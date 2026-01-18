@@ -1,8 +1,10 @@
 source,target,length,width,type
-Entry_A,Security_1,10,5,corridor
+Entry_A,Entry_Hall,10,5,corridor
+Entry_B,Entry_Hall,10,5,corridor
+Entry_Hall,Security_1,10,5,corridor
 Security_1,Gate_In,10,3,corridor
 Gate_In,Stairs_Top,10,4,corridor
 Stairs_Top,Stairs_Bottom,15,2.5,stairs
-Stairs_Bottom,Hall,10,5,corridor
-Hall,Platform_A,30,4,corridor
-Hall,Platform_B,30,4,corridor
+Stairs_Bottom,Platform_Hall,10,5,corridor
+Platform_Hall,Platform_A,30,4,corridor
+Platform_Hall,Platform_B,30,4,corridor

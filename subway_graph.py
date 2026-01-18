@@ -63,7 +63,7 @@ class SubwayWindow(QMainWindow):
                 'id': _,
                 'pos': np.array([node_info['x'], node_info['y']], dtype=float),
                 'path': planned_path[1:],  # 剩下的路径
-                'v': 0.1,
+                'v': 0.5,
                 'finished': False
             })
         self.timer = QTimer()
