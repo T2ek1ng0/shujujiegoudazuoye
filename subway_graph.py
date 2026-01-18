@@ -1,13 +1,16 @@
 import sys
 import numpy as np
+import networkx as nx
 import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt, QTimer
+import math
 import random
 
 class SubwayGraph:
     def __init__(self):
+        self.G = nx.DiGraph()
         self.nodes = pd.DataFrame(columns=['x', 'y', 'floor', 'type', 'capacity'])
         self.edges = pd.DataFrame(columns=['source', 'target', 'length', 'width', 'type'])
 
@@ -21,6 +24,13 @@ class SubwayGraph:
     def load_data(self, nodes_path, edges_path):
         self.nodes = pd.read_csv(nodes_path, index_col=0)
         self.edges = pd.read_csv(edges_path)
+        for node_name, row in self.nodes.iterrows():
+            self.G.add_node(node_name, pos=(row['x'], row['y']))
+        for _, row in self.edges.iterrows():
+            self.G.add_edge(row['source'], row['target'], weight=row['length'])
+
+    def get_nodes_by_type(self, node_type):
+        return self.nodes[self.nodes['type'] == node_type].index.tolist()
 
 class SubwayWindow(QMainWindow):
     def __init__(self, graph_data):
@@ -42,10 +52,13 @@ class SubwayWindow(QMainWindow):
         self.plot_item.addItem(self.people_item)
         self.passengers = []
         for _ in range(10):
-            planned_path = ['Entry_A', 'Security_1', 'Gate_In']  # 之后想想怎么生成这个吧。。
-            start_node = planned_path[0]
+            all_entries = self.graph.get_nodes_by_type('entry')
+            all_platforms = self.graph.get_nodes_by_type('platform')
+            start_node = random.choice(all_entries)  # string
+            final_destination = random.choice(all_platforms)  # string
             # 获取起点的坐标
             node_info = self.graph.nodes.loc[start_node]
+            planned_path = self.plan_path(start_node, final_destination)
             self.passengers.append({
                 'id': _,
                 'pos': np.array([node_info['x'], node_info['y']], dtype=float),
@@ -147,6 +160,24 @@ class SubwayWindow(QMainWindow):
         if hasattr(point, 'data') and point.data() is not None:
             info_text = f"节点名称: {point.data()}\n{info_text}"
         QMessageBox.information(self, "节点信息", info_text)
+
+    def cal_dist(self, u_name, v_name):
+        x1 = self.graph.nodes.loc[u_name]['x']
+        y1 = self.graph.nodes.loc[u_name]['y']
+        x2 = self.graph.nodes.loc[v_name]['x']
+        y2 = self.graph.nodes.loc[v_name]['y']
+        return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+
+    def plan_path(self, start, end):
+        try:
+            path = nx.astar_path(self.graph.G, source=start, target=end, heuristic=self.cal_dist, weight='weight')
+            return path
+        except nx.NetworkXNoPath:
+            print(f"Warning: No path found between {start} and {end}")
+            return []
+        except KeyError as e:
+            print(f"Error: Node {e} not found in graph")
+            return []
 
 if __name__ == "__main__":
     sim = SubwayGraph()
