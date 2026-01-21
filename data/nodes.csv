@@ -5,7 +5,7 @@ Entry_B,0,0,1,entry,50
 Security_1,10,10,1,security,5
 Gate_In,20,10,1,gate,10
 Stairs_Top,30,10,1,corridor,20
-Stairs_Bottom,33,10,-1,corridor,20
-Platform_Hall,40,10,-1,corridor,200
-Platform_A,40,20,-1,platform,100
-Platform_B,40,0,-1,platform,100
+Stairs_Bottom,45,10,-1,corridor,20
+Platform_Hall,55,10,-1,corridor,200
+Platform_A,55,30,-1,platform,100
+Platform_B,55,-10,-1,platform,100

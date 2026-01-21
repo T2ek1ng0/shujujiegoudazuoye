@@ -5,8 +5,9 @@ import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt, QTimer
-import math
 import random
+import heapq
+import math
 
 class SubwayGraph:
     def __init__(self):
@@ -106,18 +107,20 @@ class SubwayWindow(QMainWindow):
         edge_x = []
         edge_y = []
         coord_map = self.graph.nodes[['x', 'y']].T.to_dict('list')
-        for _, row in self.graph.edges.iterrows():
+        for idx, row in self.graph.edges.iterrows():
             src_pos = coord_map[row['source']]
             dst_pos = coord_map[row['target']]
             edge_x.extend([src_pos[0], dst_pos[0]])
             edge_y.extend([src_pos[1], dst_pos[1]])
-        self.lines_item = pg.PlotCurveItem(
-            x=np.array(edge_x),
-            y=np.array(edge_y),
-            pen=pg.mkPen(color=(150, 150, 150), width=3),
-            connect='pairs'
-        )
-        self.plot_item.addItem(self.lines_item)
+            line_item = pg.PlotCurveItem(
+                x=np.array([src_pos[0], dst_pos[0]]),
+                y=np.array([src_pos[1], dst_pos[1]]),
+                pen=pg.mkPen(color=(150, 150, 150), width=5),
+                clickable=True
+            )
+            line_item.edge_data = row
+            line_item.sigClicked.connect(self.on_edge_clicked)
+            self.plot_item.addItem(line_item)
         node_x = self.graph.nodes['x'].values
         node_y = self.graph.nodes['y'].values
         color_map = {
@@ -161,23 +164,67 @@ class SubwayWindow(QMainWindow):
             info_text = f"节点名称: {point.data()}\n{info_text}"
         QMessageBox.information(self, "节点信息", info_text)
 
+    def on_edge_clicked(self, item, event):
+        if hasattr(item, 'edge_data'):
+            data = item.edge_data
+            info_text = (f"起点: {data['source']}\n"
+                         f"终点: {data['target']}\n"
+                         f"长度: {data['length']}\n"
+                         f"类型: {data['type']}")
+            QMessageBox.information(self, "边信息", info_text)
+
+    def plan_path(self, start, end):
+        path = self.astar(start, end)
+        return path
+
     def cal_dist(self, u_name, v_name):
         x1 = self.graph.nodes.loc[u_name]['x']
         y1 = self.graph.nodes.loc[u_name]['y']
         x2 = self.graph.nodes.loc[v_name]['x']
         y2 = self.graph.nodes.loc[v_name]['y']
         return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+    def get_travel_cost(self, u, v, edge_data):
+        base_cost = edge_data['weight']
+        # TODO: 增加人流密度代价
+        return base_cost
+    def node_passable_check(self, node_name):
+        # TODO: 增加节点容量检查
+        return True
 
-    def plan_path(self, start, end):
-        try:
-            path = nx.astar_path(self.graph.G, source=start, target=end, heuristic=self.cal_dist, weight='weight')
-            return path
-        except nx.NetworkXNoPath:
-            print(f"Warning: No path found between {start} and {end}")
-            return []
-        except KeyError as e:
-            print(f"Error: Node {e} not found in graph")
-            return []
+    def astar(self, start, target):
+        open_set = []
+        heapq.heappush(open_set, (0, start))
+        came_from = {}
+        g_score = {node: float('inf') for node in self.graph.G.nodes}  # 从起点到n的已知最小代价
+        g_score[start] = 0
+        f_score = {node: float('inf') for node in self.graph.G.nodes}
+        f_score[start] = self.cal_dist(start, target)  # f_score[n] = g_score[n] + h(n)
+        open_set_hash = {start}
+        while open_set:
+            current_f, current = heapq.heappop(open_set)
+            open_set_hash.discard(current)
+            if current == target:
+                return self.reconstruct_path(came_from, current)
+            for neighbor, edge_attr in self.graph.G[current].items():
+                if not self.node_passable_check(neighbor):
+                    continue
+                cost = self.get_travel_cost(current, neighbor, edge_attr)
+                test_g_score = g_score[current] + cost
+                if test_g_score < g_score[neighbor]:
+                    came_from[neighbor] = current
+                    g_score[neighbor] = test_g_score
+                    f_score[neighbor] = g_score[neighbor] + self.cal_dist(neighbor, target)
+                    if neighbor not in open_set_hash:
+                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                        open_set_hash.add(neighbor)
+        return []
+
+    def reconstruct_path(self,came_from, current):
+        total_path = [current]
+        while current in came_from:
+            current = came_from[current]
+            total_path.append(current)
+        return total_path[::-1]
 
 if __name__ == "__main__":
     sim = SubwayGraph()
