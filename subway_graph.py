@@ -29,6 +29,11 @@ class SubwayGraph:
             self.G.add_node(node_name, pos=(row['x'], row['y']))
         for _, row in self.edges.iterrows():
             self.G.add_edge(row['source'], row['target'], weight=row['length'])
+        self.nodes['curr_capacity'] = 0
+        self.edges['curr_capacity'] = 0
+        self.edge_lookup = {}
+        for idx, row in self.edges.iterrows():
+            self.edge_lookup[(row['source'], row['target'])] = idx
 
     def get_nodes_by_type(self, node_type):
         return self.nodes[self.nodes['type'] == node_type].index.tolist()
@@ -51,23 +56,25 @@ class SubwayWindow(QMainWindow):
         self.plot_item.setAspectLocked(True)
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.draw_map()
-        self.people_item = pg.ScatterPlotItem(size=10, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
+        self.people_item = pg.ScatterPlotItem(size=5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
         self.plot_item.addItem(self.people_item)
         self.passengers = []
         for _ in range(10):
             self.passengers.append(Person())
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
-        self.timer.start(50)  # 每50ms刷新一次
+        self.timer.start(100)  # 刷新时间
 
     def update_simulation(self):
         # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
         x_positions = []
         y_positions = []
-        for p in self.passengers:
+        for p in reversed(self.passengers):
             px, py = p.update(p.v)
             x_positions.append(px)
             y_positions.append(py)
+            if p.finished:
+                self.passengers.pop()
         # 刷新画布
         self.people_item.setData(x=x_positions, y=y_positions)
 
@@ -83,10 +90,10 @@ class SubwayWindow(QMainWindow):
             line_item = pg.PlotCurveItem(
                 x=np.array([src_pos[0], dst_pos[0]]),
                 y=np.array([src_pos[1], dst_pos[1]]),
-                pen=pg.mkPen(color=(150, 150, 150), width=5),
+                pen=pg.mkPen(color=(150, 150, 150), width=12),
                 clickable=True
             )
-            line_item.edge_data = row
+            line_item.edge_index = idx
             line_item.sigClicked.connect(self.on_edge_clicked)
             self.plot_item.addItem(line_item)
         node_x = self.graph.nodes['x'].values
@@ -102,7 +109,7 @@ class SubwayWindow(QMainWindow):
         self.nodes_item = pg.ScatterPlotItem(
             x=node_x,
             y=node_y,
-            size=15,
+            size=18,
             brush=brushes,
             pen=pg.mkPen(None),  # 无边框
             symbol='o',
@@ -130,15 +137,18 @@ class SubwayWindow(QMainWindow):
         info_text = f"坐标位置:\nX: {pos.x():.1f}\nY: {pos.y():.1f}"
         if hasattr(point, 'data') and point.data() is not None:
             info_text = f"节点名称: {point.data()}\n{info_text}"
+            info_text = f"{info_text}\n 当前人数: {self.graph.nodes.loc[point.data()]['curr_capacity']}"
         QMessageBox.information(self, "节点信息", info_text)
 
     def on_edge_clicked(self, item, event):
-        if hasattr(item, 'edge_data'):
-            data = item.edge_data
+        if hasattr(item, 'edge_index'):
+            idx = item.edge_index
+            data = self.graph.edges.loc[idx]
             info_text = (f"起点: {data['source']}\n"
                          f"终点: {data['target']}\n"
                          f"长度: {data['length']}\n"
-                         f"类型: {data['type']}")
+                         f"类型: {data['type']}\n"
+                         f"当前人数: {data['curr_capacity']}\n")
             QMessageBox.information(self, "边信息", info_text)
 
 def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
@@ -147,8 +157,7 @@ def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
     return base_cost
 
 def node_passable_check(graph: SubwayGraph, node_name):
-    # TODO: 增加节点容量检查
-    return True
+    return graph.nodes.loc[node_name]['capacity'] >= graph.nodes.loc[node_name]['curr_capacity']
 
 def cal_dist(graph: SubwayGraph, u_name, v_name):
     x1 = graph.nodes.loc[u_name]['x']
@@ -211,6 +220,9 @@ class Person:
         self.x = sim.nodes.loc[start_node]['x']
         self.y = sim.nodes.loc[start_node]['y']
         self.path = plan_path(sim, self.location, self.target)[1:]
+        self.in_node = True
+        sim.nodes.at[self.location, 'curr_capacity'] += 1
+        self.current_edge_idx = None
 
     def update(self, threshold=None):
         if not threshold:
@@ -220,23 +232,38 @@ class Person:
         if len(self.path) == 0:
             if self.location == self.target:
                 self.finished = True
+                if self.in_node:
+                    sim.nodes.at[self.location, 'curr_capacity'] -= 1
+                    self.in_node = False
             return self.x, self.y
         next_node_name = self.path[0]
         target_info = sim.nodes.loc[next_node_name]
-        target_pos = np.array([target_info['x'], target_info['y']], dtype=float)
-        direct_x = target_pos[0] - self.x
-        direct_y = target_pos[1] - self.y
+        direct_x = target_info['x'] - self.x
+        direct_y = target_info['y'] - self.y
         distance = np.sqrt(direct_x ** 2 + direct_y ** 2)
+        if self.in_node and distance > threshold:  # 离开点,进入边
+            sim.nodes.at[self.location, 'curr_capacity'] -= 1
+            self.in_node = False
+            if (self.location, next_node_name) in sim.edge_lookup:
+                edge_idx = sim.edge_lookup[(self.location, next_node_name)]
+                sim.edges.at[edge_idx, 'curr_capacity'] += 1
+                self.current_edge_idx = edge_idx
         if distance < threshold:
-            self.x = target_pos[0]
-            self.y = target_pos[1]
-            self.location = next_node_name
+            self.x = target_info['x']
+            self.y = target_info['y']
+            if not self.in_node:  # 离开边,进入点
+                self.location = next_node_name
+                sim.nodes.at[self.location, 'curr_capacity'] += 1
+                self.in_node = True
+                if self.current_edge_idx is not None:
+                    sim.edges.at[self.current_edge_idx, 'curr_capacity'] -= 1
+                    self.current_edge_idx = None
+            self.path = plan_path(sim, self.location, self.target)[1:]
         elif distance > 0:
                 normalized_dir_x = direct_x / distance
                 normalized_dir_y = direct_y / distance
                 self.x += normalized_dir_x * self.v
                 self.y += normalized_dir_y * self.v
-        self.path = plan_path(sim, self.location, self.target)[1:]
         return self.x, self.y
 
 if __name__ == "__main__":
