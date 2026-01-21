@@ -33,6 +33,8 @@ class SubwayGraph:
     def get_nodes_by_type(self, node_type):
         return self.nodes[self.nodes['type'] == node_type].index.tolist()
 
+sim = SubwayGraph()
+
 class SubwayWindow(QMainWindow):
     def __init__(self, graph_data):
         super().__init__()
@@ -53,20 +55,7 @@ class SubwayWindow(QMainWindow):
         self.plot_item.addItem(self.people_item)
         self.passengers = []
         for _ in range(10):
-            all_entries = self.graph.get_nodes_by_type('entry')
-            all_platforms = self.graph.get_nodes_by_type('platform')
-            start_node = random.choice(all_entries)  # string
-            final_destination = random.choice(all_platforms)  # string
-            # 获取起点的坐标
-            node_info = self.graph.nodes.loc[start_node]
-            planned_path = self.plan_path(start_node, final_destination)
-            self.passengers.append({
-                'id': _,
-                'pos': np.array([node_info['x'], node_info['y']], dtype=float),
-                'path': planned_path[1:],  # 剩下的路径
-                'v': 0.5,
-                'finished': False
-            })
+            self.passengers.append(Person())
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
         self.timer.start(50)  # 每50ms刷新一次
@@ -75,31 +64,10 @@ class SubwayWindow(QMainWindow):
         # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
         x_positions = []
         y_positions = []
-        arrival_threshold = self.passengers[0]['v']
         for p in self.passengers:
-            if p['finished']:  # 如果已经到达终点，停在原地
-                x_positions.append(p['pos'][0])
-                y_positions.append(p['pos'][1])
-                continue
-            if len(p['path']) == 0:
-                p['finished'] = True
-                continue
-            next_node_name = p['path'][0]
-            target_info = self.graph.nodes.loc[next_node_name]
-            target_pos = np.array([target_info['x'], target_info['y']], dtype=float)
-            direction_vector = target_pos - p['pos']
-            distance = np.linalg.norm(direction_vector)
-            if distance < arrival_threshold:
-                p['pos'] = target_pos
-                p['path'].pop(0)
-            else:
-                if distance > 0:
-                    normalized_dir = direction_vector / distance
-                else:
-                    normalized_dir = np.zeros(2)
-                p['pos'] += normalized_dir * p['v']
-            x_positions.append(p['pos'][0])
-            y_positions.append(p['pos'][1])
+            px, py = p.update(p.v)
+            x_positions.append(px)
+            y_positions.append(py)
         # 刷新画布
         self.people_item.setData(x=x_positions, y=y_positions)
 
@@ -173,61 +141,105 @@ class SubwayWindow(QMainWindow):
                          f"类型: {data['type']}")
             QMessageBox.information(self, "边信息", info_text)
 
-    def plan_path(self, start, end):
-        path = self.astar(start, end)
-        return path
+def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
+    base_cost = edge_data['weight']
+    # TODO: 增加人流密度代价
+    return base_cost
 
-    def cal_dist(self, u_name, v_name):
-        x1 = self.graph.nodes.loc[u_name]['x']
-        y1 = self.graph.nodes.loc[u_name]['y']
-        x2 = self.graph.nodes.loc[v_name]['x']
-        y2 = self.graph.nodes.loc[v_name]['y']
-        return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-    def get_travel_cost(self, u, v, edge_data):
-        base_cost = edge_data['weight']
-        # TODO: 增加人流密度代价
-        return base_cost
-    def node_passable_check(self, node_name):
-        # TODO: 增加节点容量检查
-        return True
+def node_passable_check(graph: SubwayGraph, node_name):
+    # TODO: 增加节点容量检查
+    return True
 
-    def astar(self, start, target):
-        open_set = []
-        heapq.heappush(open_set, (0, start))
-        came_from = {}
-        g_score = {node: float('inf') for node in self.graph.G.nodes}  # 从起点到n的已知最小代价
-        g_score[start] = 0
-        f_score = {node: float('inf') for node in self.graph.G.nodes}
-        f_score[start] = self.cal_dist(start, target)  # f_score[n] = g_score[n] + h(n)
-        open_set_hash = {start}
-        while open_set:
-            current_f, current = heapq.heappop(open_set)
-            open_set_hash.discard(current)
-            if current == target:
-                return self.reconstruct_path(came_from, current)
-            for neighbor, edge_attr in self.graph.G[current].items():
-                if not self.node_passable_check(neighbor):
-                    continue
-                cost = self.get_travel_cost(current, neighbor, edge_attr)
-                test_g_score = g_score[current] + cost
-                if test_g_score < g_score[neighbor]:
-                    came_from[neighbor] = current
-                    g_score[neighbor] = test_g_score
-                    f_score[neighbor] = g_score[neighbor] + self.cal_dist(neighbor, target)
-                    if neighbor not in open_set_hash:
-                        heapq.heappush(open_set, (f_score[neighbor], neighbor))
-                        open_set_hash.add(neighbor)
-        return []
+def cal_dist(graph: SubwayGraph, u_name, v_name):
+    x1 = graph.nodes.loc[u_name]['x']
+    y1 = graph.nodes.loc[u_name]['y']
+    x2 = graph.nodes.loc[v_name]['x']
+    y2 = graph.nodes.loc[v_name]['y']
+    return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
 
-    def reconstruct_path(self,came_from, current):
-        total_path = [current]
-        while current in came_from:
-            current = came_from[current]
-            total_path.append(current)
-        return total_path[::-1]
+def astar(graph: SubwayGraph, start, target):
+    open_set = []
+    heapq.heappush(open_set, (0, start))
+    came_from = {}
+    g_score = {node: float('inf') for node in graph.G.nodes}  # 从起点到n的已知最小代价
+    g_score[start] = 0
+    f_score = {node: float('inf') for node in graph.G.nodes}
+    f_score[start] = cal_dist(graph, start, target)  # f_score[n] = g_score[n] + h(n)
+    open_set_hash = {start}
+    while open_set:
+        current_f, current = heapq.heappop(open_set)
+        open_set_hash.discard(current)
+        if current == target:
+            return reconstruct_path(came_from, current)
+        for neighbor, edge_attr in graph.G[current].items():
+            if not node_passable_check(graph, neighbor):
+                continue
+            cost = get_travel_cost(graph, current, neighbor, edge_attr)
+            test_g_score = g_score[current] + cost
+            if test_g_score < g_score[neighbor]:
+                came_from[neighbor] = current
+                g_score[neighbor] = test_g_score
+                f_score[neighbor] = g_score[neighbor] + cal_dist(graph, neighbor, target)
+                if neighbor not in open_set_hash:
+                    heapq.heappush(open_set, (f_score[neighbor], neighbor))
+                    open_set_hash.add(neighbor)
+    return []
+
+def reconstruct_path(came_from, current):
+    total_path = [current]
+    while current in came_from:
+        current = came_from[current]
+        total_path.append(current)
+    return total_path[::-1]
+
+def plan_path(graph: SubwayGraph, start, end):
+    path = astar(graph, start, end)
+    return path
+
+class Person:
+    def __init__(self, pid=None, basic_v=0.5, finished=False):
+        self.id = pid
+        self.v = basic_v
+        self.finished = finished
+        all_entries = sim.get_nodes_by_type('entry')
+        all_platforms = sim.get_nodes_by_type('platform')
+        start_node = random.choice(all_entries)
+        final_destination = random.choice(all_platforms)
+        self.begin = start_node
+        self.target = final_destination
+        self.location = start_node
+        self.x = sim.nodes.loc[start_node]['x']
+        self.y = sim.nodes.loc[start_node]['y']
+        self.path = plan_path(sim, self.location, self.target)[1:]
+
+    def update(self, threshold=None):
+        if not threshold:
+            threshold = self.v
+        if self.finished:
+            return self.x, self.y
+        if len(self.path) == 0:
+            if self.location == self.target:
+                self.finished = True
+            return self.x, self.y
+        next_node_name = self.path[0]
+        target_info = sim.nodes.loc[next_node_name]
+        target_pos = np.array([target_info['x'], target_info['y']], dtype=float)
+        direct_x = target_pos[0] - self.x
+        direct_y = target_pos[1] - self.y
+        distance = np.sqrt(direct_x ** 2 + direct_y ** 2)
+        if distance < threshold:
+            self.x = target_pos[0]
+            self.y = target_pos[1]
+            self.location = next_node_name
+        elif distance > 0:
+                normalized_dir_x = direct_x / distance
+                normalized_dir_y = direct_y / distance
+                self.x += normalized_dir_x * self.v
+                self.y += normalized_dir_y * self.v
+        self.path = plan_path(sim, self.location, self.target)[1:]
+        return self.x, self.y
 
 if __name__ == "__main__":
-    sim = SubwayGraph()
     sim.load_data(r'data\nodes.csv', r'data\edges.csv')
     app = QApplication(sys.argv)
     window = SubwayWindow(sim)
