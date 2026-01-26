@@ -56,11 +56,11 @@ class SubwayWindow(QMainWindow):
         self.plot_item.setAspectLocked(True)
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.draw_map()
-        self.people_item = pg.ScatterPlotItem(size=5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 0, 0))
+        self.people_item = pg.ScatterPlotItem(size=3.5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 242, 0))
         self.plot_item.addItem(self.people_item)
         self.passengers = []
-        for _ in range(10):
-            self.passengers.append(Person())
+        for _ in range(100):
+            self.passengers.append(Person(basic_v=(np.random.rand()*0.5+0.5)*0.5))
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
         self.timer.start(100)  # 刷新时间
@@ -69,14 +69,15 @@ class SubwayWindow(QMainWindow):
         # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
         x_positions = []
         y_positions = []
+        curr_passengers = []
         for p in reversed(self.passengers):
             px, py = p.update(p.v)
             x_positions.append(px)
             y_positions.append(py)
-            if p.finished:
-                self.passengers.pop()
-        # 刷新画布
-        self.people_item.setData(x=x_positions, y=y_positions)
+            if not p.finished:
+                curr_passengers.append(p)
+        self.passengers = curr_passengers
+        self.people_item.setData(x=x_positions, y=y_positions)  # 刷新画布
 
     def draw_map(self):
         edge_x = []
@@ -148,13 +149,18 @@ class SubwayWindow(QMainWindow):
                          f"终点: {data['target']}\n"
                          f"长度: {data['length']}\n"
                          f"类型: {data['type']}\n"
-                         f"当前人数: {data['curr_capacity']}\n")
+                         f"当前人数: {data['curr_capacity']}\n"
+                         f"人流密度：{data['curr_capacity']/(data['length']*data['width']):.2f}")
             QMessageBox.information(self, "边信息", info_text)
 
 def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
+    #edge_idx = graph.edge_lookup[(u, v)]  # 但uv间有多条边咋办?算了先不考虑这个。。
+    #base_cost = graph.edges.at[edge_idx, 'length']
     base_cost = edge_data['weight']
     # TODO: 增加人流密度代价
-    return base_cost
+    intensity_cost = np.exp(graph.nodes.loc[v]['curr_capacity'] / graph.nodes.loc[v]['capacity']) - np.exp(graph.nodes.loc[u]['curr_capacity'] / graph.nodes.loc[u]['capacity'])  # 奖励去更稀疏的地方?
+    intensity_cost /= 5
+    return max(base_cost + intensity_cost, 0)
 
 def node_passable_check(graph: SubwayGraph, node_name):
     return graph.nodes.loc[node_name]['capacity'] >= graph.nodes.loc[node_name]['curr_capacity']
@@ -208,6 +214,7 @@ def plan_path(graph: SubwayGraph, start, end):
 class Person:
     def __init__(self, pid=None, basic_v=0.5, finished=False):
         self.id = pid
+        self.basic_v = basic_v
         self.v = basic_v
         self.finished = finished
         all_entries = sim.get_nodes_by_type('entry')
