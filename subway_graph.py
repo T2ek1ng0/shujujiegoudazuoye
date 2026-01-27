@@ -5,9 +5,11 @@ import pandas as pd
 import pyqtgraph as pg
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QMessageBox
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFont
 import random
 import heapq
 import math
+np.random.seed(3849)
 
 class SubwayGraph:
     def __init__(self):
@@ -54,31 +56,36 @@ class SubwayWindow(QMainWindow):
         layout.addWidget(self.gl_widget)
         self.plot_item = self.gl_widget.addPlot(title="Station Map")
         self.plot_item.setAspectLocked(True)
-        self.plot_item.showGrid(x=True, y=True, alpha=0.3)
+        self.plot_item.showGrid(x=True, y=True, alpha=0.2)
         self.draw_map()
         self.people_item = pg.ScatterPlotItem(size=3.5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 200, 0))
         self.plot_item.addItem(self.people_item)
         self.passengers = []
-        for _ in range(100):
-            self.passengers.append(Person(state='in', basic_v=(np.random.rand()*0.5+0.5)*0.5))
-            self.passengers.append(Person(state='out', basic_v=(np.random.rand() * 0.5 + 0.5) * 0.5))
+        self.time = 0
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
-        self.timer.start(100)  # 刷新时间
+        self.timer.start(50)  # 刷新时间
 
     def update_simulation(self):
-        # 这里写下一帧的逻辑, 遍历 self.passengers，更新他们的位置
+        add_nps = int(np.abs(np.sin(self.time))) + 2
+        t_vec = np.random.rand(add_nps)
+        for i in range(add_nps):
+            if t_vec[i] > 0.5:
+                self.passengers.append(Person(state='out', basic_v=(np.random.rand() * 0.5 + 0.5) * 1))
+            else:
+                self.passengers.append(Person(state='in', basic_v=(np.random.rand() * 0.5 + 0.5) * 1))
         x_positions = []
         y_positions = []
         curr_passengers = []
-        for p in reversed(self.passengers):
+        for p in self.passengers:
             px, py = p.update(p.v)
             x_positions.append(px)
             y_positions.append(py)
-            if not p.finished:
+            if not p.finished or 'Platform' in p.target and np.abs(np.sin(self.time)) < 1:
                 curr_passengers.append(p)
         self.passengers = curr_passengers
         self.people_item.setData(x=x_positions, y=y_positions)  # 刷新画布
+        self.time += 0.05
 
     def draw_map(self):
         edge_x = []
@@ -105,7 +112,8 @@ class SubwayWindow(QMainWindow):
             'security': (255, 0, 0),  # 红
             'gate': (255, 165, 0),  # 橙
             'platform': (0, 0, 255),  # 蓝
-            'corridor': (200, 200, 200)  # 灰
+            'corridor': (200, 200, 200),  # 灰
+            'facilities': (255, 0, 255),
         }
         brushes = [pg.mkBrush(color_map.get(t, (0, 0, 0))) for t in self.graph.nodes['type']]
         self.nodes_item = pg.ScatterPlotItem(
@@ -281,6 +289,10 @@ class Person:
                 normalized_dir_y = direct_y / distance
                 self.x += normalized_dir_x * self.v
                 self.y += normalized_dir_y * self.v
+        if not self.in_node:
+            self.v = self.basic_v * (1 - sim.edges.at[self.current_edge_idx, 'curr_capacity'] / (sim.edges.at[self.current_edge_idx, 'length'] * sim.edges.at[self.current_edge_idx, 'width']))
+        else:
+            self.v = self.basic_v
         return self.x, self.y
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 id,x,y,floor,type,capacity
-Entry_Hall,0,10,1,corridor,200
+Entry_Hall,0,10,1,corridor,400
 Entry_A,0,20,1,entry,50
 Entry_B,0,0,1,entry,50
 Security_1,-4,15,1,security,10
@@ -18,6 +18,10 @@ Gate_Out_4,20,14,1,gate,10
 Gate_Out_5,20,12,1,gate,10
 Stairs_Top,30,10,1,corridor,20
 Stairs_Bottom,45,10,-1,corridor,20
-Platform_Hall,55,10,-1,corridor,200
+Platform_Hall,55,10,-1,corridor,400
 Platform_A,55,30,-1,platform,100
 Platform_B,55,-10,-1,platform,100
+Ticket_Machine_1,-4,20,-1,facilities,10
+Ticket_Machine_2,-2,20,-1,facilities,10
+Ticket_Machine_3,-4,0,-1,facilities,10
+Ticket_Machine_4,-2,0,-1,facilities,10
