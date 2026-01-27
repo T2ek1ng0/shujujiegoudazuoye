@@ -81,7 +81,7 @@ class SubwayWindow(QMainWindow):
             px, py = p.update(p.v)
             x_positions.append(px)
             y_positions.append(py)
-            if not p.finished or 'Platform' in p.target and np.abs(np.sin(self.time)) < 1:
+            if not p.finished or p.target in ['Platform_A', 'Platform_B'] and np.abs(np.sin(self.time)) < 1:
                 curr_passengers.append(p)
         self.passengers = curr_passengers
         self.people_item.setData(x=x_positions, y=y_positions)  # 刷新画布
