@@ -56,11 +56,12 @@ class SubwayWindow(QMainWindow):
         self.plot_item.setAspectLocked(True)
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         self.draw_map()
-        self.people_item = pg.ScatterPlotItem(size=3.5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 242, 0))
+        self.people_item = pg.ScatterPlotItem(size=3.5, pen=pg.mkPen(None), brush=pg.mkBrush(255, 200, 0))
         self.plot_item.addItem(self.people_item)
         self.passengers = []
         for _ in range(100):
-            self.passengers.append(Person(basic_v=(np.random.rand()*0.5+0.5)*0.5))
+            self.passengers.append(Person(state='in', basic_v=(np.random.rand()*0.5+0.5)*0.5))
+            self.passengers.append(Person(state='out', basic_v=(np.random.rand() * 0.5 + 0.5) * 0.5))
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_simulation)
         self.timer.start(100)  # 刷新时间
@@ -159,8 +160,11 @@ def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
     base_cost = edge_data['weight']
     # TODO: 增加人流密度代价
     intensity_cost = np.exp(graph.nodes.loc[v]['curr_capacity'] / graph.nodes.loc[v]['capacity']) - np.exp(graph.nodes.loc[u]['curr_capacity'] / graph.nodes.loc[u]['capacity'])  # 奖励去更稀疏的地方?
-    intensity_cost /= 5
-    return max(base_cost + intensity_cost, 0)
+    intensity_cost /= 8
+    edge_idx = graph.edge_lookup[(u, v)]
+    edge_instensity_cost = np.exp(graph.edges.at[edge_idx, 'curr_capacity'] / (graph.edges.at[edge_idx, 'length'] * graph.edges.at[edge_idx, 'width']))
+    edge_instensity_cost /= 8
+    return max(base_cost + intensity_cost + edge_instensity_cost, 0)
 
 def node_passable_check(graph: SubwayGraph, node_name):
     return graph.nodes.loc[node_name]['capacity'] >= graph.nodes.loc[node_name]['curr_capacity']
@@ -212,15 +216,21 @@ def plan_path(graph: SubwayGraph, start, end):
     return path
 
 class Person:
-    def __init__(self, pid=None, basic_v=0.5, finished=False):
+    def __init__(self, state='in', pid=None, basic_v=0.5, finished=False):
         self.id = pid
         self.basic_v = basic_v
         self.v = basic_v
         self.finished = finished
         all_entries = sim.get_nodes_by_type('entry')
         all_platforms = sim.get_nodes_by_type('platform')
-        start_node = random.choice(all_entries)
-        final_destination = random.choice(all_platforms)
+        if state == 'in':
+            start_node = random.choice(all_entries)
+            final_destination = random.choice(all_platforms)
+        elif state == 'out':
+            start_node = random.choice(all_platforms)
+            final_destination = random.choice(all_entries)
+        else:
+            raise ValueError(f'state must be either "in" or "out"')
         self.begin = start_node
         self.target = final_destination
         self.location = start_node
