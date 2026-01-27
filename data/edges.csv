@@ -41,10 +41,10 @@ Gate_Out_4,Entry_Hall,10,4,corridor
 Gate_Out_5,Entry_Hall,10,4,corridor
 Entry_Hall,Entry_A,10,5,corridor
 Entry_Hall,Entry_B,10,5,corridor
-Stairs_Top,Stairs_Bottom,15,2.5,stairs
+Stairs_Top,Stairs_Bottom,15,5,stairs
 Stairs_Bottom,Platform_Hall,10,5,corridor
-Platform_Hall,Platform_A,20,4,corridor
-Platform_Hall,Platform_B,20,4,corridor
+Platform_Hall,Platform_A,20,5,corridor
+Platform_Hall,Platform_B,20,5,corridor
 Platform_A,Platform_Hall,20,4,corridor
 Platform_B,Platform_Hall,20,4,corridor
 Platform_Hall,Stairs_Bottom,10,5,corridor

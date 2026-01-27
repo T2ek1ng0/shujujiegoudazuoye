@@ -168,10 +168,10 @@ def get_travel_cost(graph: SubwayGraph, u, v, edge_data):
     base_cost = edge_data['weight']
     # TODO: 增加人流密度代价
     intensity_cost = np.exp(graph.nodes.loc[v]['curr_capacity'] / graph.nodes.loc[v]['capacity']) - np.exp(graph.nodes.loc[u]['curr_capacity'] / graph.nodes.loc[u]['capacity'])  # 奖励去更稀疏的地方?
-    intensity_cost /= 8
+    intensity_cost /= 5
     edge_idx = graph.edge_lookup[(u, v)]
     edge_instensity_cost = np.exp(graph.edges.at[edge_idx, 'curr_capacity'] / (graph.edges.at[edge_idx, 'length'] * graph.edges.at[edge_idx, 'width']))
-    edge_instensity_cost /= 8
+    edge_instensity_cost /= 5
     return max(base_cost + intensity_cost + edge_instensity_cost, 0)
 
 def node_passable_check(graph: SubwayGraph, node_name):
@@ -251,7 +251,7 @@ class Person:
 
     def update(self, threshold=None):
         if not threshold:
-            threshold = self.v
+            threshold = self.basic_v
         if self.finished:
             return self.x, self.y
         if len(self.path) == 0:
@@ -291,6 +291,7 @@ class Person:
                 self.y += normalized_dir_y * self.v
         if not self.in_node:
             self.v = self.basic_v * (1 - sim.edges.at[self.current_edge_idx, 'curr_capacity'] / (sim.edges.at[self.current_edge_idx, 'length'] * sim.edges.at[self.current_edge_idx, 'width']))
+            self.v = max(self.v, 0.1)
         else:
             self.v = self.basic_v
         return self.x, self.y
